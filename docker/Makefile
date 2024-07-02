@@ -201,6 +201,36 @@ ubuntu:
 	-t final $(ROOT_DIR)
 	docker tag final gerbil/ubuntu:$(arch)-$(BRANCH)
 
+smp:
+	docker build --target final \
+	--rm=true --no-cache \
+	--build-arg branch="$(BRANCH)" \
+	--build-arg configure_args="-enable-absolute-shared-libs \
+								--enable-debug \
+								--enable-debug-alloc-mem \
+								--enable-debug-c-backtrace \
+								--enable-debug-garbage-collect \
+								--enable-debug-log \
+								--enable-default-runtime-options=f8,-8,t8 \
+								--enable-dynamic-clib \
+								--enable-march=native \
+								--enable-multiple-versions \
+								--enable-multiple-threaded-vms \
+								--enable-openssl=/usr \
+								--enable-poll \
+								--enable-single-host \
+								--enable-smp \
+								--enable-targets='' \
+								--enable-march="
+	--build-arg cores=$(cores) \
+	--build-arg distro="ubuntu" \
+	--build-arg packages="$(ubuntu_packages)" \
+	--build-arg repo="$(REPO)" \
+	--build-arg shared="no" \
+	--build-arg with_db="YES" \
+	-t final $(ROOT_DIR)
+	docker tag final gerbil/ubuntu:$(arch)-$(BRANCH)
+
 debian:
 	docker build --target final \
 	--rm=true --no-cache \
