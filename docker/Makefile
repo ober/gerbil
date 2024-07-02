@@ -211,7 +211,6 @@ smp:
 								--enable-debug-c-backtrace \
 								--enable-debug-garbage-collect \
 								--enable-debug-log \
-								--enable-default-runtime-options=f8,-8,t8 \
 								--enable-dynamic-clib \
 								--enable-march=native \
 								--enable-multiple-versions \

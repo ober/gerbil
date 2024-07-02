@@ -32,7 +32,7 @@ RUN case ${distro} in \
     yum update -y && yum groupinstall -y 'Development Tools' && \
     eval yum install -y ${packages} \
     ;; \
-    debian|ubuntu) \
+    debian|ubuntu|smp) \
     apt update -y && \
     eval apt install -y ${packages} \
     ;; \
