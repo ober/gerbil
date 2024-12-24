@@ -27,7 +27,7 @@ RUN case ${distro} in \
     eval yum install -y ${packages} \
     ;; \
     fedora) \
-    yum update -y && yum groupinstall -y 'Development Tools' && \
+    dnf update -y && dnf module install -y 'Development Tools' && \
     eval yum install -y ${packages} \
     ;; \
     debian|ubuntu) \
