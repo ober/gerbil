@@ -44,8 +44,7 @@ FROM base as gerbil
 ARG configure_args
 ARG cores
 ARG shared
-RUN cd /opt && eval git clone https://github.com/mighty-gerbils/gerbil gerbil-src \
-    && cd /opt/gerbil-src && eval ./configure --prefix=/opt/gerbil --enable-shared=${shared} ${configure_args}
+RUN cd /src && eval ./configure --prefix=/opt/gerbil --enable-shared=${shared} ${configure_args}
 
 RUN cd /opt/gerbil-src && make
 RUN cd /opt/gerbil-src && make install
