@@ -6,7 +6,7 @@ arch := $(shell uname -m)
 DEFAULT=gerbilxx
 
 BRANCH := $(shell git branch --show-current)
-TAG := $(shell git decribe --tags)
+TAG := $(shell git describe --tags)
 
 ifeq ($(REPO),)
 REPO := mighty-gerbils/gerbil
