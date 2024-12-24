@@ -5,7 +5,7 @@ cores := $(shell nproc)
 arch := $(shell uname -m)
 DEFAULT=gerbilxx
 
-BRANCH := $(shell git branch)
+BRANCH := $(shell git branch --show-current)
 TAG := $(shell git decribe --tags)
 
 ifeq ($(REPO),)
