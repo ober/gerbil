@@ -1,7 +1,5 @@
 ARG distro
 ARG with_db
-ARG repo
-ARG branch
 ARG cores
 ARG configure_args
 ARG packages
@@ -43,12 +41,10 @@ RUN case ${distro} in \
     esac
 
 FROM base as gerbil
-ARG branch
 ARG configure_args
 ARG cores
-ARG repo
 ARG shared
-RUN cd /opt && eval git clone -b "${branch}" "https://github.com/${repo}" gerbil-src \
+RUN cd /opt && eval git clone https://github.com/might-gerbils/gerbil gerbil-src \
     && cd /opt/gerbil-src && eval ./configure --prefix=/opt/gerbil --enable-shared=${shared} ${configure_args}
 
 RUN cd /opt/gerbil-src && make
