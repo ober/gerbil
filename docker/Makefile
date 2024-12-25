@@ -223,7 +223,7 @@ package-ubuntu:
 	bash -c "gem install fpm && \
 	fpm -f -s dir -p /src/ -t deb -n gerbil-scheme -v $(TAG) \
 	-d libsqlite3-dev -d libssl-dev \
-	--description 'Gerbil Scheme Package' /opt/gerbil"
+	--description 'Gerbil Scheme' /opt/gerbil"
 
 package-tgz:
 	docker run -v $(ROOT_DIR):/src:z -t gerbil/ubuntu:$(arch)-$(BRANCH) \
