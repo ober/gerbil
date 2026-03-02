@@ -46,6 +46,9 @@ namespace: #f
 (def (&raw-table-seed-set! tab val)
   (##unchecked-structure-set! tab val 6 __table::t 'raw-table-seed-set!))
 
+;; SMP: global spinlock for all raw table mutations
+(def __raw-table-lock (__make-inline-lock))
+
 ;; generic raw tables
 (def (raw-table-size-hint->size size-hint)
   (if (and (fixnum? size-hint) (fx> size-hint 0))
@@ -60,36 +63,55 @@ namespace: #f
     (##structure __table::t table 0 (fxquotient size 2) hash test seed)))
 
 (def (raw-table-ref tab key default)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (let ((table (&raw-table-table tab))
         (seed (&raw-table-seed tab))
         (hash (&raw-table-hash tab))
         (test (&raw-table-test tab)))
-    (__table-ref table seed hash test key default)))
+    (let (result (__table-ref table seed hash test key default))
+      (__unlock-inline! __raw-table-lock)
+      result)))
 
 (def (raw-table-set! tab key value)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (when (fx< (&raw-table-free tab)
              (fxquotient (vector-length (&raw-table-table tab)) 4))
     (__raw-table-rehash! tab))
-  (__raw-table-set! tab key value))
+  (__raw-table-set! tab key value)
+  (__unlock-inline! __raw-table-lock))
 
 (def (raw-table-update! tab key update default)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (when (fx< (&raw-table-free tab)
              (fxquotient (vector-length (&raw-table-table tab)) 4))
     (__raw-table-rehash! tab))
-  (__raw-table-update! tab key update default))
+  (__raw-table-update! tab key update default)
+  (__unlock-inline! __raw-table-lock))
 
 (def (raw-table-delete! tab key)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (let ((table (&raw-table-table tab))
         (seed (&raw-table-seed tab))
         (hash (&raw-table-hash tab))
         (test (&raw-table-test tab)))
     (__table-del! table seed hash test key
                   (lambda ()
-                    (set! (&raw-table-count tab) (fx- (&raw-table-count tab) 1))))))
+                    (set! (&raw-table-count tab) (fx- (&raw-table-count tab) 1)))))
+  (__unlock-inline! __raw-table-lock))
 
 (def (raw-table-for-each tab proc)
+  ;; Snapshot the table vector under the lock to prevent seeing a
+  ;; mid-rehash (empty) table.  Release the lock before iterating
+  ;; so that the proc callback can safely access other tables.
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (let* ((table (&raw-table-table tab))
          (size  (vector-length table)))
+    (__unlock-inline! __raw-table-lock)
     (let loop ((i 0))
       (when (fx< i size)
         (let (key (vector-ref table i))
@@ -100,16 +122,22 @@ namespace: #f
         (loop (fx+ i 2))))))
 
 (def (raw-table-copy tab)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (let (new-tab (##structure-copy tab))
     (set! (&raw-table-table new-tab)
       (vector-copy (&raw-table-table tab)))
+    (__unlock-inline! __raw-table-lock)
     new-tab))
 
 (def (raw-table-clear! tab)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __raw-table-lock)
   (vector-fill! (&raw-table-table tab) (macro-unused-obj))
   (set! (&raw-table-count tab) 0)
   (set! (&raw-table-free tab)
-    (fxquotient (vector-length (&raw-table-table tab)) 2)))
+    (fxquotient (vector-length (&raw-table-table tab)) 2))
+  (__unlock-inline! __raw-table-lock))
 
 (def (__raw-table-set! tab key value)
   (let ((table (&raw-table-table tab))
@@ -238,14 +266,21 @@ namespace: #f
      (def (make (size-hint #f) (seed 0))
        (make-raw-table size-hint hash eq seed))
      (def (ref tab key default)
+       (declare (not interrupts-enabled))
+       (__lock-inline! __raw-table-lock)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
-         (__table-ref table seed hash eq key default)))
+         (let (result (__table-ref table seed hash eq key default))
+           (__unlock-inline! __raw-table-lock)
+           result)))
      (def (set tab key value)
+       (declare (not interrupts-enabled))
+       (__lock-inline! __raw-table-lock)
        (when (fx< (&raw-table-free tab)
                   (fxquotient (vector-length (&raw-table-table tab)) 4))
          (__raw-table-rehash! tab))
-       (__set tab key value))
+       (__set tab key value)
+       (__unlock-inline! __raw-table-lock))
      (def (__set tab key value)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
@@ -256,10 +291,13 @@ namespace: #f
                        (lambda ()            ; ressurect
                          (set! (&raw-table-count tab) (fx+ (&raw-table-count tab) 1))))))
      (def (update tab key update default)
+       (declare (not interrupts-enabled))
+       (__lock-inline! __raw-table-lock)
        (when (fx< (&raw-table-free tab)
                   (fxquotient (vector-length (&raw-table-table tab)) 4))
          (__raw-table-rehash! tab))
-       (__update tab key update default))
+       (__update tab key update default)
+       (__unlock-inline! __raw-table-lock))
      (def (__update tab key update default)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
@@ -270,11 +308,14 @@ namespace: #f
                        (lambda ()            ; ressurect
                          (set! (&raw-table-count tab) (fx+ (&raw-table-count tab) 1))))))
      (def (del tab key)
+       (declare (not interrupts-enabled))
+       (__lock-inline! __raw-table-lock)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
          (__table-del! table seed hash eq key
                        (lambda ()
-                         (set! (&raw-table-count tab) (fx- (&raw-table-count tab) 1)))))))))
+                         (set! (&raw-table-count tab) (fx- (&raw-table-count tab) 1)))))
+       (__unlock-inline! __raw-table-lock)))))
 
 
 ;; eq-table
@@ -436,17 +477,30 @@ namespace: #f
 (def (&gc-table-immediate-set! tab val)
   (##unchecked-structure-set! tab val 2 __gc-table::t 'gc-table-immediate-set!))
 
+;; SMP: global spinlock for gc-table rehash and immediate creation
+(def __gc-table-lock (__make-inline-lock))
+
 (def (make-gc-table size-hint (klass __gc-table::t) (flags 0))
   (let (gcht (__gc-table-new (if (fixnum? size-hint) size-hint 16) flags))
     (##structure klass gcht #f)))
 
 (def (__gc-table-immediate tab)
+  (declare (not interrupts-enabled))
   (cond
    ((&gc-table-immediate tab))
    (else
-    (let (immediate (make-immediate-table #f 0))
-      (set! (&gc-table-immediate tab) immediate)
-      immediate))))
+    ;; Double-check under lock to prevent duplicate creation
+    (__lock-inline! __gc-table-lock)
+    (cond
+     ((&gc-table-immediate tab)
+      => (lambda (imm)
+           (__unlock-inline! __gc-table-lock)
+           imm))
+     (else
+      (let (immediate (make-immediate-table #f 0))
+        (set! (&gc-table-immediate tab) immediate)
+        (__unlock-inline! __gc-table-lock)
+        immediate))))))
 
 (def (__gc-table-new size flags)
   (let* ((flags
@@ -470,10 +524,16 @@ namespace: #f
         (&gc-table-gcht tab)))))
 
 (def (__gc-table-rehash! tab)
+  (declare (not interrupts-enabled))
+  (__lock-inline! __gc-table-lock)
+  ;; Always rehash under lock. Called both for GC key-moved rehash and
+  ;; for overflow resize. The lock prevents concurrent rehashes from
+  ;; corrupting state; gc-table-set!'s verify-retry handles staleness.
   (let* ((old-table (&gc-table-gcht tab))
          (new-table (##gc-hash-table-resize! old-table __gc-table-loads))
-         (gcht (##gc-hash-table-rehash! old-table new-table)))
-    (set! (&gc-table-gcht tab) gcht)))
+         (result (##gc-hash-table-rehash! old-table new-table)))
+    (set! (&gc-table-gcht tab) result)
+    (__unlock-inline! __gc-table-lock)))
 
 (def (gc-table-ref tab key default)
   (declare (not interrupts-enabled))
@@ -495,6 +555,10 @@ namespace: #f
     (let (gcht (__gc-table-e tab))
       (when (##gc-hash-table-set! gcht key value)
         (__gc-table-rehash! tab)
+        (gc-table-set! tab key value))
+      ;; SMP: verify gcht is still current; another thread may have
+      ;; resized between our __gc-table-e and ##gc-hash-table-set!
+      (unless (##eq? gcht (&gc-table-gcht tab))
         (gc-table-set! tab key value)))
     (immediate-table-set! (__gc-table-immediate tab) key value)))
 
@@ -511,6 +575,9 @@ namespace: #f
     (let (gcht (__gc-table-e tab))
       (when (##gc-hash-table-set! gcht key (macro-absent-obj))
         (__gc-table-rehash! tab)
+        (gc-table-delete! tab key))
+      ;; SMP: verify gcht is still current
+      (unless (##eq? gcht (&gc-table-gcht tab))
         (gc-table-delete! tab key))))
    ((&gc-table-immediate tab)
     => (lambda (immediate)
@@ -540,11 +607,14 @@ namespace: #f
     result))
 
 (def (gc-table-clear! tab)
+  (declare (not interrupts-enabled))
   (let* ((gcht (__gc-table-e tab))
          (new-table
           (__gc-table-new 16 (macro-gc-hash-table-flags gcht))))
+    (__lock-inline! __gc-table-lock)
     (set! (&gc-table-gcht tab) new-table)
-    (set! (&gc-table-immediate tab) #f)))
+    (set! (&gc-table-immediate tab) #f)
+    (__unlock-inline! __gc-table-lock)))
 
 (def (gc-table-length tab)
   (let (gcht (__gc-table-e tab))
