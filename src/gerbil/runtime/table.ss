@@ -63,7 +63,6 @@ namespace: #f
     (##structure __table::t table 0 (fxquotient size 2) hash test seed)))
 
 (def (raw-table-ref tab key default)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (let ((table (&raw-table-table tab))
         (seed (&raw-table-seed tab))
@@ -74,7 +73,6 @@ namespace: #f
       result)))
 
 (def (raw-table-set! tab key value)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (when (fx< (&raw-table-free tab)
              (fxquotient (vector-length (&raw-table-table tab)) 4))
@@ -83,7 +81,6 @@ namespace: #f
   (__unlock-inline! __raw-table-lock))
 
 (def (raw-table-update! tab key update default)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (when (fx< (&raw-table-free tab)
              (fxquotient (vector-length (&raw-table-table tab)) 4))
@@ -92,7 +89,6 @@ namespace: #f
   (__unlock-inline! __raw-table-lock))
 
 (def (raw-table-delete! tab key)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (let ((table (&raw-table-table tab))
         (seed (&raw-table-seed tab))
@@ -107,7 +103,6 @@ namespace: #f
   ;; Snapshot the table vector under the lock to prevent seeing a
   ;; mid-rehash (empty) table.  Release the lock before iterating
   ;; so that the proc callback can safely access other tables.
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (let* ((table (&raw-table-table tab))
          (size  (vector-length table)))
@@ -122,7 +117,6 @@ namespace: #f
         (loop (fx+ i 2))))))
 
 (def (raw-table-copy tab)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (let (new-tab (##structure-copy tab))
     (set! (&raw-table-table new-tab)
@@ -131,7 +125,6 @@ namespace: #f
     new-tab))
 
 (def (raw-table-clear! tab)
-  (declare (not interrupts-enabled))
   (__lock-inline! __raw-table-lock)
   (vector-fill! (&raw-table-table tab) (macro-unused-obj))
   (set! (&raw-table-count tab) 0)
@@ -215,7 +208,6 @@ namespace: #f
   (gerbil-smp
    (def __eq-hash-lock (__make-inline-lock))
    (def (__eq-hash obj)
-     (declare (not interrupts-enabled))
      (__lock-inline! __eq-hash-lock)
      (let (h (__object->eq-hash obj))
        (__unlock-inline! __eq-hash-lock)
@@ -266,7 +258,6 @@ namespace: #f
      (def (make (size-hint #f) (seed 0))
        (make-raw-table size-hint hash eq seed))
      (def (ref tab key default)
-       (declare (not interrupts-enabled))
        (__lock-inline! __raw-table-lock)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
@@ -274,7 +265,6 @@ namespace: #f
            (__unlock-inline! __raw-table-lock)
            result)))
      (def (set tab key value)
-       (declare (not interrupts-enabled))
        (__lock-inline! __raw-table-lock)
        (when (fx< (&raw-table-free tab)
                   (fxquotient (vector-length (&raw-table-table tab)) 4))
@@ -291,7 +281,6 @@ namespace: #f
                        (lambda ()            ; ressurect
                          (set! (&raw-table-count tab) (fx+ (&raw-table-count tab) 1))))))
      (def (update tab key update default)
-       (declare (not interrupts-enabled))
        (__lock-inline! __raw-table-lock)
        (when (fx< (&raw-table-free tab)
                   (fxquotient (vector-length (&raw-table-table tab)) 4))
@@ -308,7 +297,6 @@ namespace: #f
                        (lambda ()            ; ressurect
                          (set! (&raw-table-count tab) (fx+ (&raw-table-count tab) 1))))))
      (def (del tab key)
-       (declare (not interrupts-enabled))
        (__lock-inline! __raw-table-lock)
        (let ((table (&raw-table-table tab))
              (seed (&raw-table-seed tab)))
@@ -485,7 +473,6 @@ namespace: #f
     (##structure klass gcht #f)))
 
 (def (__gc-table-immediate tab)
-  (declare (not interrupts-enabled))
   (cond
    ((&gc-table-immediate tab))
    (else
@@ -512,7 +499,6 @@ namespace: #f
     gcht))
 
 (def (__gc-table-e tab)
-  (declare (not interrupts-enabled))
   (let (gcht (&gc-table-gcht tab))
     (if (fx= 0
              (fxand
@@ -524,7 +510,6 @@ namespace: #f
         (&gc-table-gcht tab)))))
 
 (def (__gc-table-rehash! tab)
-  (declare (not interrupts-enabled))
   (__lock-inline! __gc-table-lock)
   ;; Always rehash under lock. Called both for GC key-moved rehash and
   ;; for overflow resize. The lock prevents concurrent rehashes from
@@ -536,7 +521,6 @@ namespace: #f
     (__unlock-inline! __gc-table-lock)))
 
 (def (gc-table-ref tab key default)
-  (declare (not interrupts-enabled))
   (cond
    ((##mem-allocated? key)
     (let (gcht (__gc-table-e tab))
@@ -550,7 +534,6 @@ namespace: #f
    (else default)))
 
 (def (gc-table-set! tab key value)
-  (declare (not interrupts-enabled))
   (if (##mem-allocated? key)
     (let (gcht (__gc-table-e tab))
       (when (##gc-hash-table-set! gcht key value)
@@ -569,7 +552,6 @@ namespace: #f
     (immediate-table-update! (__gc-table-immediate tab) key update default)))
 
 (def (gc-table-delete! tab key)
-  (declare (not interrupts-enabled))
   (cond
    ((##mem-allocated? key)
     (let (gcht (__gc-table-e tab))
@@ -584,7 +566,6 @@ namespace: #f
          (immediate-table-delete! immediate key)))))
 
 (def (gc-table-for-each tab proc)
-  (declare (not interrupts-enabled))
   ;; mem allocated first
   (let (gcht (__gc-table-e tab))
     (##gc-hash-table-for-each proc gcht))
@@ -607,7 +588,6 @@ namespace: #f
     result))
 
 (def (gc-table-clear! tab)
-  (declare (not interrupts-enabled))
   (let* ((gcht (__gc-table-e tab))
          (new-table
           (__gc-table-new 16 (macro-gc-hash-table-flags gcht))))
@@ -629,7 +609,6 @@ namespace: #f
   (make-gc-table 1024 __gc-table::t (macro-gc-hash-table-flag-weak-keys)))
 
 (def (__object->eq-hash obj)
-  (declare (not interrupts-enabled))
   (let (val (gc-table-ref __object-eq-hash obj #f))
     (if val
       val
